@@ -1,12 +1,11 @@
 [package]
 name = "dogstatsd"
 version = "0.12.1"
-authors = ["Matt Casper <matthewvcasper@gmail.com>"]
+authors = ["<9975355+kitsuneninetails@users.noreply.github.com>", "Matt Casper <matthewvcasper@gmail.com>" ]
 license = "MIT"
-description = "A DogstatsD client for Rust."
-documentation = "https://mcasper.github.io/dogstatsd-rs/dogstatsd/"
-edition = "2021"
-repository = "https://github.com/mcasper/dogstatsd-rs"
+edition = "2024"
+description = "A DogstatsD client for Rust on Win32."
+repository = "https://github.com/kitsuneninetails/dogstatsd-rs-win32"
 keywords = ["datadog", "dogstatsd", "client"]
 
 [dependencies]

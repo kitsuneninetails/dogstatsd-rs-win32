@@ -94,9 +94,10 @@ use chrono::Utc;
 use std::borrow::Cow;
 use std::future::Future;
 use std::net::UdpSocket;
+#[cfg(unix)]
 use std::os::unix::net::UnixDatagram;
 use std::sync::mpsc::Sender;
-use std::sync::{mpsc, Mutex};
+use std::sync::{Mutex, mpsc};
 use std::thread;
 use std::time::Duration;
 
@@ -397,8 +398,10 @@ impl OptionsBuilder {
 #[derive(Debug)]
 enum SocketType {
     Udp(UdpSocket),
+    #[cfg(unix)]
     Uds(UnixDatagram),
     BatchableUdp(Mutex<Sender<batch_processor::Message>>),
+    #[cfg(unix)]
     BatchableUds(Mutex<Sender<batch_processor::Message>>),
 }
 
@@ -425,7 +428,16 @@ impl PartialEq for Client {
 impl Drop for Client {
     fn drop(&mut self) {
         match &self.socket {
+            #[cfg(unix)]
             SocketType::BatchableUdp(tx_channel) | SocketType::BatchableUds(tx_channel) => {
+                // Destructing Client... If fails, ignore and keep going...
+                let _ = tx_channel
+                    .lock()
+                    .unwrap()
+                    .send(batch_processor::Message::Shutdown);
+            }
+            #[cfg(windows)]
+            SocketType::BatchableUdp(tx_channel) => {
                 // Destructing Client... If fails, ignore and keep going...
                 let _ = tx_channel
                     .lock()
@@ -459,7 +471,7 @@ impl Client {
             });
             Mutex::from(tx)
         };
-
+        #[cfg(unix)]
         let socket = match options.socket_path {
             Some(socket_path) => {
                 // The follow scenarios can occur:
@@ -504,6 +516,21 @@ impl Client {
                 } else {
                     wrapped_socket
                 }
+            }
+        };
+
+        #[cfg(windows)]
+        let socket = {
+            let wrapped_socket = SocketType::Udp(UdpSocket::bind(&options.from_addr)?);
+            if let Some(batching_options) = options.batching_options {
+                SocketType::BatchableUdp(fn_create_tx_channel(
+                    wrapped_socket,
+                    batching_options,
+                    options.to_addr.clone(),
+                    None,
+                ))
+            } else {
+                wrapped_socket
             }
         };
 
@@ -954,10 +981,22 @@ impl Client {
             SocketType::Udp(socket) => {
                 socket.send_to(formatted_metric.as_slice(), &self.to_addr)?;
             }
+            #[cfg(unix)]
             SocketType::Uds(socket) => {
                 socket.send(formatted_metric.as_slice())?;
             }
+            #[cfg(unix)]
             SocketType::BatchableUdp(tx_channel) | SocketType::BatchableUds(tx_channel) => {
+                tx_channel
+                    .lock()
+                    .expect("Mutex poisoned...")
+                    .send(batch_processor::Message::Data(formatted_metric))
+                    .unwrap_or_else(|error| {
+                        println!("Exception occurred when writing to channel: {:?}", error);
+                    });
+            }
+            #[cfg(windows)]
+            SocketType::BatchableUdp(tx_channel) => {
                 tx_channel
                     .lock()
                     .expect("Mutex poisoned...")
@@ -1061,7 +1100,7 @@ mod batch_processor {
     use std::sync::mpsc::Receiver;
     use std::time::SystemTime;
 
-    use retry::{delay::jitter, delay::Exponential, retry};
+    use retry::{delay::Exponential, delay::jitter, retry};
 
     use crate::{BatchingOptions, SocketType};
 
@@ -1075,7 +1114,8 @@ mod batch_processor {
         socket: &SocketType,
         data: &Vec<u8>,
         to_addr: &String,
-        socket_path: &Option<String>,
+        #[cfg(unix)] socket_path: &Option<String>,
+        #[cfg(windows)] _socket_path: &Option<String>,
     ) {
         retry(
             Exponential::from_millis(batching_options.initial_retry_delay)
@@ -1088,6 +1128,7 @@ mod batch_processor {
                             return Err(error);
                         }
                     }
+                    #[cfg(unix)]
                     SocketType::Uds(socket) => {
                         if let Err(error) = socket.send(data.as_slice()) {
                             // Per https://doc.rust-lang.org/stable/std/os/unix/net/struct.UnixDatagram.html#method.send
@@ -1101,8 +1142,13 @@ mod batch_processor {
                             return Err(error);
                         }
                     }
+                    #[cfg(unix)]
                     SocketType::BatchableUdp(_tx_channel)
                     | SocketType::BatchableUds(_tx_channel) => {
+                        panic!("Logic Error - socket type should not be batchable.");
+                    }
+                    #[cfg(windows)]
+                    SocketType::BatchableUdp(_tx_channel) => {
                         panic!("Logic Error - socket type should not be batchable.");
                     }
                 }
