@@ -1,5 +1,5 @@
 [package]
-name = "dogstatsd_win32"
+name = "dogstatsd"
 version = "0.12.1"
 authors = ["<9975355+kitsuneninetails@users.noreply.github.com>", "Matt Casper <matthewvcasper@gmail.com>" ]
 license = "MIT"
