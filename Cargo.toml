@@ -1,6 +1,6 @@
 [package]
 name = "dogstatsd"
-version = "0.12.1"
+version = "0.13.0"
 authors = ["<9975355+kitsuneninetails@users.noreply.github.com>", "Matt Casper <matthewvcasper@gmail.com>" ]
 license = "MIT"
 edition = "2024"
