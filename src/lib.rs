@@ -138,7 +138,7 @@ pub struct Options {
     pub namespace: String,
     /// Default tags to include with every request.
     pub default_tags: Vec<String>,
-    /// OPTIONAL, if defined, will use UDS instead of UDP and will ignore UDP options
+    /// OPTIONAL, if defined, will use UDS instead of UDP and will ignore UDP options (not used on Windows)
     pub socket_path: Option<String>,
     /// OPTIONAL, if defined, will utilize batching for sending metrics
     pub batching_options: Option<BatchingOptions>,
